@@ -52,16 +52,43 @@ def cargar():
         'Nombre autor responsable para comunicación':'autor',
         'Título de la ponencia\nEl título debe ser corto, específico e informativo.':'titulo'
     })
+
     p['nombre_norm'] = p['nombre_completo'].map(normalizar)
     p['id_norm'] = p['identificacion'].map(id_limpia)
     po['autor_norm'] = po['autor'].map(normalizar)
-    # Un autor puede tener más de una ponencia.
+
+    # Agrupa todas las ponencias de cada autor responsable.
     titulos = (po.dropna(subset=['autor'])
                  .groupby('autor_norm')['titulo']
                  .apply(lambda x: [str(t).strip() for t in x if pd.notna(t) and str(t).strip()])
                  .to_dict())
+
+    # 1) Personas registradas en el formulario general de participación.
     p['titulos'] = p['nombre_norm'].map(lambda x: titulos.get(x, []))
     p['ponente'] = p['titulos'].map(bool)
+    p['origen'] = 'Inscripción general'
+
+    # 2) Autores que están en ponencias pero NO aparecen en el formulario general.
+    # Se agregan a la base de búsqueda para que nunca desaparezca un ponente.
+    nombres_participantes = set(p['nombre_norm'])
+    autores_faltantes = (po[(po['autor_norm'] != '') & (~po['autor_norm'].isin(nombres_participantes))]
+                         .drop_duplicates(subset=['autor_norm'])
+                         .copy())
+
+    if not autores_faltantes.empty:
+        extra = pd.DataFrame({
+            'nombre_completo': autores_faltantes['autor'].astype(str).str.strip(),
+            'identificacion': '',
+            'correo': '',
+            'institucion': '',
+            'nombre_norm': autores_faltantes['autor_norm'],
+            'id_norm': '',
+            'titulos': autores_faltantes['autor_norm'].map(lambda x: titulos.get(x, [])),
+            'ponente': True,
+            'origen': 'Registro de ponencia'
+        })
+        p = pd.concat([p, extra], ignore_index=True)
+
     return p
 
 df = cargar()
@@ -99,7 +126,7 @@ if consulta.strip():
         res = df[mask]
 
     if res.empty:
-        st.warning('No se encontró un inscrito con ese dato. Verifica la identificación o intenta con una parte del nombre.')
+        st.warning('No se encontró una persona con ese dato. Verifica la identificación o intenta con una parte del nombre.')
     else:
         st.caption(f'{len(res)} resultado(s) encontrado(s)')
         for _, r in res.iterrows():
@@ -108,7 +135,7 @@ if consulta.strip():
             st.subheader(str(r['nombre_completo']).strip())
             c1, c2 = st.columns(2)
             with c1:
-                st.write('**Identificación:**', id_limpia(r['identificacion']))
+                st.write('**Identificación:**', id_limpia(r['identificacion']) or 'No registrada en el formulario de participación')
                 st.write('**Primer nombre:**', n1 or '—')
                 st.write('**Segundo nombre:**', n2 or '—')
             with c2:
