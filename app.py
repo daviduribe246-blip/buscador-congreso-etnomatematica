@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import re
 import unicodedata
-import hashlib
 from pathlib import Path
 
 st.set_page_config(page_title='Consulta de inscritos | III CCE', page_icon='🔎', layout='centered')
@@ -11,8 +10,7 @@ BASE = Path(__file__).parent
 PARTICIPANTES = BASE / 'participantes.xlsx'
 PONENCIAS = BASE / 'ponencias.xlsx'
 LOGO = BASE / 'logo_congreso.jpg'
-INDICE_CERTIFICADOS = BASE / 'certificados_index.csv'
-CARPETA_CERTIFICADOS = BASE / 'certificados'
+CERTIFICADOS = BASE / 'certificados_drive.csv'
 
 
 def normalizar(txt):
@@ -94,6 +92,14 @@ def cargar():
 
     return p
 
+@st.cache_data
+def cargar_certificados():
+    c = pd.read_csv(CERTIFICADOS, dtype=str).fillna('')
+    c['nombre_norm'] = c['nombre'].map(normalizar)
+    return c
+
+certificados = cargar_certificados()
+
 df = cargar()
 
 st.markdown('''
@@ -114,77 +120,33 @@ st.markdown('''
 st.image(str(LOGO), use_container_width=True)
 st.markdown('<div class="hero"><h2>Consulta de inscritos</h2><p>III Congreso Colombiano de Etnomatemática · Riohacha, La Guajira</p></div>', unsafe_allow_html=True)
 
-consulta = st.text_input('Número de identificación o nombre', placeholder='Ej.: 1144208484 o María del Mar Gómez')
+st.subheader('Consultar y descargar certificados de ponencia')
+st.caption('Busca por nombre del autor o coautor. También puedes usar identificación si coincide con la inscripción registrada.')
+consulta = st.text_input('Nombre o número de identificación', placeholder='Ej.: Juan Ignacio Hernández o 123456789')
 
 if consulta.strip():
     qn = normalizar(consulta)
     qi = id_limpia(consulta)
     solo_digitos = bool(re.fullmatch(r'[\d\.\-\s]+', consulta.strip()))
     if solo_digitos:
-        res = df[df['id_norm'] == qi]
+        personas = df[df['id_norm'].eq(qi) & df['id_norm'].ne('')]
+        nombres = set(personas['nombre_norm'])
+        resultados = certificados[certificados['nombre_norm'].isin(nombres)]
     else:
-        # Todas las palabras ingresadas deben estar presentes; funciona con orden parcial.
-        tokens = [t for t in qn.split() if t]
-        mask = df['nombre_norm'].map(lambda n: all(t in n.split() for t in tokens))
-        res = df[mask]
-
-    if res.empty:
-        st.warning('No se encontró una persona con ese dato. Verifica la identificación o intenta con una parte del nombre.')
+        tokens = qn.split()
+        resultados = certificados[certificados['nombre_norm'].map(lambda n: all(t in n.split() for t in tokens))]
+    if resultados.empty:
+        st.warning('No se encontraron certificados con ese dato. Intenta escribir solo el nombre o un apellido. Si buscas por identificación, es posible que el autor no la haya registrado.')
     else:
-        st.caption(f'{len(res)} resultado(s) encontrado(s)')
-        for _, r in res.iterrows():
-            n1, n2, a1, a2 = dividir_nombre(r['nombre_completo'])
-            st.markdown('<div class="ficha">', unsafe_allow_html=True)
-            st.subheader(str(r['nombre_completo']).strip())
-            c1, c2 = st.columns(2)
-            with c1:
-                st.write('**Identificación:**', id_limpia(r['identificacion']) or 'No registrada en el formulario de participación')
-                st.write('**Primer nombre:**', n1 or '—')
-                st.write('**Segundo nombre:**', n2 or '—')
-            with c2:
-                st.write('**Primer apellido:**', a1 or '—')
-                st.write('**Segundo apellido:**', a2 or '—')
-                estado = '<span class="badge-si">PONENTE</span>' if r['ponente'] else '<span class="badge-no">NO PONENTE</span>'
-                st.markdown('**Participación:** ' + estado, unsafe_allow_html=True)
-            if r['ponente']:
-                st.markdown('**Título de la ponencia:**')
-                for titulo in r['titulos']:
-                    st.info(titulo)
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.success(f'Se encontraron {len(resultados)} certificado(s).')
+        for _, r in resultados.iterrows():
+            with st.container(border=True):
+                st.markdown(f"**{r['nombre']}**")
+                st.caption(r['codigo_certificado'])
+                st.write('**Ponencia:**', r['titulo_ponencia'])
+                st.link_button('📄 Abrir certificado PDF en Google Drive', r['enlace'], use_container_width=True)
 else:
-    st.info('Escribe una identificación o parte del nombre para iniciar la consulta.')
+    st.info('Escribe el nombre o identificación para consultar los certificados.')
 
 st.divider()
-st.caption('Base de consulta del III Congreso Colombiano de Etnomatemática · Los datos se leen de los archivos oficiales incluidos en la aplicación.')
-
-
-st.divider()
-st.header('Descarga de certificados de ponencia')
-st.write('Para autores y coautores de las 33 ponencias sustentadas el 7 de octubre de 2026.')
-st.caption('Ingresa el código individual que te entregó la organización. No se requiere publicar tu identificación.')
-codigo = st.text_input('Código individual de descarga', type='password', key='codigo_certificado')
-if codigo.strip():
-    if not INDICE_CERTIFICADOS.is_file():
-        st.error('La base de certificados todavía no está disponible.')
-    else:
-        indice = pd.read_csv(INDICE_CERTIFICADOS, dtype=str).fillna('')
-        digest = hashlib.sha256(codigo.strip().encode('utf-8')).hexdigest()
-        encontrados = indice[indice['codigo_hash'] == digest]
-        if encontrados.empty:
-            st.warning('Código no encontrado. Comprueba el código enviado por la organización.')
-        else:
-            for _, cert in encontrados.iterrows():
-                st.success(f"Certificado disponible: {cert['nombre']}")
-                st.write('**Ponencia:**', cert['titulo'])
-                nombre_archivo = Path(cert['archivo']).name
-                ruta = CARPETA_CERTIFICADOS / nombre_archivo
-                if ruta.is_file():
-                    st.download_button(
-                        'Descargar mi certificado (PDF)',
-                        data=ruta.read_bytes(),
-                        file_name=nombre_archivo,
-                        mime='application/pdf',
-                        key=f"descarga_{cert['id']}"
-                    )
-                else:
-                    st.error('El PDF de este certificado no está disponible. Contacta a la organización.')
+st.caption('III Congreso Colombiano de Etnomatemática · Certificados almacenados en Google Drive. La disponibilidad depende de los permisos de cada PDF.')
