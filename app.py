@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 import unicodedata
+import hashlib
 from pathlib import Path
 
 st.set_page_config(page_title='Consulta de inscritos | III CCE', page_icon='🔎', layout='centered')
@@ -10,6 +11,8 @@ BASE = Path(__file__).parent
 PARTICIPANTES = BASE / 'participantes.xlsx'
 PONENCIAS = BASE / 'ponencias.xlsx'
 LOGO = BASE / 'logo_congreso.jpg'
+INDICE_CERTIFICADOS = BASE / 'certificados_index.csv'
+CARPETA_CERTIFICADOS = BASE / 'certificados'
 
 
 def normalizar(txt):
@@ -153,3 +156,35 @@ else:
 
 st.divider()
 st.caption('Base de consulta del III Congreso Colombiano de Etnomatemática · Los datos se leen de los archivos oficiales incluidos en la aplicación.')
+
+
+st.divider()
+st.header('Descarga de certificados de ponencia')
+st.write('Para autores y coautores de las 33 ponencias sustentadas el 7 de octubre de 2026.')
+st.caption('Ingresa el código individual que te entregó la organización. No se requiere publicar tu identificación.')
+codigo = st.text_input('Código individual de descarga', type='password', key='codigo_certificado')
+if codigo.strip():
+    if not INDICE_CERTIFICADOS.is_file():
+        st.error('La base de certificados todavía no está disponible.')
+    else:
+        indice = pd.read_csv(INDICE_CERTIFICADOS, dtype=str).fillna('')
+        digest = hashlib.sha256(codigo.strip().encode('utf-8')).hexdigest()
+        encontrados = indice[indice['codigo_hash'] == digest]
+        if encontrados.empty:
+            st.warning('Código no encontrado. Comprueba el código enviado por la organización.')
+        else:
+            for _, cert in encontrados.iterrows():
+                st.success(f"Certificado disponible: {cert['nombre']}")
+                st.write('**Ponencia:**', cert['titulo'])
+                nombre_archivo = Path(cert['archivo']).name
+                ruta = CARPETA_CERTIFICADOS / nombre_archivo
+                if ruta.is_file():
+                    st.download_button(
+                        'Descargar mi certificado (PDF)',
+                        data=ruta.read_bytes(),
+                        file_name=nombre_archivo,
+                        mime='application/pdf',
+                        key=f"descarga_{cert['id']}"
+                    )
+                else:
+                    st.error('El PDF de este certificado no está disponible. Contacta a la organización.')
