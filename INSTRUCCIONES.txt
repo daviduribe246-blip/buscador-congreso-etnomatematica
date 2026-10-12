@@ -1,0 +1,10 @@
+ACTUALIZACION SIN BORRAR LOS CERTIFICADOS DE PONENTES
+
+1. En el repositorio de GitHub, sustituir SOLO app.py y certificados_index.csv por estos dos archivos.
+2. NO borrar la carpeta certificados/ que ya contiene los PDF de ponentes.
+3. NO subir el ZIP de certificados de participantes a GitHub: sus PDF estan en Google Drive.
+4. Esperar que Streamlit se actualice.
+5. Probar un nombre de participante, uno de ponente y uno que tenga ambos certificados.
+6. Los enlaces de Drive funcionan si cada archivo tiene permiso de lectura mediante enlace. Compartir la carpeta no garantiza que todos los archivos individuales tengan el permiso adecuado; probar desde una ventana de incognito.
+
+NOTA: El buscador de certificados por nombre muestra resultados de cualquier persona; si se requiere acceso restringido, usar los codigos individuales en lugar de busqueda publica.
