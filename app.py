@@ -5,7 +5,7 @@ import unicodedata
 import hashlib
 from pathlib import Path
 
-st.set_page_config(page_title='Consulta de inscritos | III CCE', page_icon='🔎', layout='centered')
+st.set_page_config(page_title='Certificados de ponencia | III CCE', page_icon='🔎', layout='centered')
 
 BASE = Path(__file__).parent
 PARTICIPANTES = BASE / 'participantes.xlsx'
@@ -160,7 +160,7 @@ st.caption('Base de consulta del III Congreso Colombiano de Etnomatemática · L
 
 st.divider()
 st.header('Descarga de certificados')
-st.write('Busca tu nombre para consultar los certificados de ponencia y participación disponibles.')
+st.write('Busca tu nombre para consultar y descargar tu certificado de ponencia.')
 
 @st.cache_data
 def cargar_indice():
