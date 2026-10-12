@@ -168,6 +168,17 @@ def cargar_indice():
         return pd.DataFrame()
     indice = pd.read_csv(INDICE_CERTIFICADOS, dtype=str).fillna('')
     indice['nombre_norm'] = indice['nombre'].map(normalizar)
+    # Enlaces de ponencias desde la fuente original de Google Drive.
+    # Permite recuperar las descargas aun cuando el índice se haya actualizado
+    # sin enlaces o Streamlit mantenga una versión anterior del CSV.
+    origen = BASE / 'certificados_drive.csv'
+    if origen.is_file():
+        enlaces = pd.read_csv(origen, dtype=str).fillna('')
+        if {'codigo_certificado', 'enlace'}.issubset(enlaces.columns):
+            mapa = dict(zip(enlaces['codigo_certificado'].str.strip(), enlaces['enlace'].str.strip()))
+            indice['enlace_drive'] = indice.apply(
+                lambda r: mapa.get(str(r['id']).strip(), str(r.get('enlace_drive', '')).strip())
+                if r['tipo'] == 'Ponencia' else str(r.get('enlace_drive', '')).strip(), axis=1)
     return indice
 
 indice = cargar_indice()
